@@ -26,15 +26,24 @@
     <div id="map"></div>
     <script>
 
-        // Automatically detect the server IP from the browser URL, or fallback to localhost
-        let SERVER_IP = window.location.hostname || "127.0.0.1";
+        // Automatically detect the server IP, or use a custom one saved in the browser
+        let SERVER_IP = localStorage.getItem('custom_server_ip') || window.location.hostname || "127.0.0.1";
         
         const ipInput = document.getElementById('server-ip');
         if (ipInput) {
             ipInput.value = SERVER_IP;
             ipInput.addEventListener('change', (e) => {
-                SERVER_IP = e.target.value;
-                alert("Server IP updated to " + SERVER_IP + ". Please refresh the page if the map tiles need to reload.");
+                SERVER_IP = e.target.value.trim();
+                
+                // Clear it if they empty the box to go back to automatic detection
+                if (SERVER_IP === "") {
+                    localStorage.removeItem('custom_server_ip');
+                } else {
+                    localStorage.setItem('custom_server_ip', SERVER_IP);
+                }
+                
+                // Reload the page instantly so the map tiles connect to the new IP!
+                window.location.reload();
             });
         }
 
