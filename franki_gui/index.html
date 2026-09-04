@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tajikistan MapTest - MapLibre</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <script src="maplibre-gl.js"></script>
+    <link href="maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+    </style>
+</head>
+<body>
+    <!-- RIDE HAILING SEARCH BAR -->
+    <div id="search-container" style="position: absolute; top: 10px; left: 10px; z-index: 1000; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 300px; font-family: sans-serif;">
+        <h3 style="margin: 0 0 10px 0; font-size: 16px;">Where to?</h3>
+        <input type="text" id="search-input" placeholder="Search address or POI..." style="width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 5px;">
+        <div id="search-results" style="max-height: 200px; overflow-y: auto; font-size: 13px; color: #333;"></div>
+    </div>
+    
+    <div id="map"></div>
+    <script>
+        var map = new maplibregl.Map({
+            container: 'map',
+            center: [68.7870, 38.5598], // Dushanbe
+            zoom: 13.5,
+            pitch: 45,
+            style: {
+                version: 8,
+                glyphs: "http://localhost:8087/fonts/{fontstack}/{range}.pbf",
+                sources: {
+                    'osm_polygon': {
+                        type: 'vector',
+                        url: 'http://127.0.0.1:3000/planet_osm_polygon'
+                    },
+                    'osm_line': {
+                        type: 'vector',
+                        url: 'http://127.0.0.1:3000/planet_osm_line'
+                    }
+                },
+                layers: [
+                    {
+                        'id': 'background',
+                        'type': 'background',
+                        'paint': { 'background-color': '#e0dfdf' }
+                    },
+                    {
+                        'id': 'water',
+                        'type': 'fill',
+                        'source': 'osm_polygon',
+                        'source-layer': 'planet_osm_polygon',
+                        'filter': ['any', ['==', 'natural', 'water'], ['has', 'waterway']],
+                        'paint': { 'fill-color': '#a0c8f0' }
+                    },
+                    {
+                        'id': 'park',
+                        'type': 'fill',
+                        'source': 'osm_polygon',
+                        'source-layer': 'planet_osm_polygon',
+                        'filter': ['==', 'leisure', 'park'],
+                        'paint': { 'fill-color': '#c8facc' }
+                    },
+                    {
+                        'id': 'transportation',
+                        'type': 'line',
+                        'source': 'osm_line',
+                        'source-layer': 'planet_osm_line',
+                        'filter': ['has', 'highway'],
+                        'paint': {
+                            'line-color': '#ffffff',
+                            'line-width': 2
+                        }
+                    },
+                    {
+                        'id': 'building',
+                        'type': 'fill',
+                        'source': 'osm_polygon',
+                        'source-layer': 'planet_osm_polygon',
+                        'filter': ['has', 'building'],
+                        'paint': {
+                            'fill-color': '#cbcdc9',
+                            'fill-outline-color': '#b4b5b2',
+                            'fill-opacity': 0.8
+                        }
+                    },
+                    {
+                        'id': 'road-labels',
+                        'type': 'symbol',
+                        'source': 'osm_line',
+                        'source-layer': 'planet_osm_line',
+                        'filter': ['has', 'name'],
+                        'layout': {
+                            'text-field': ['get', 'name'],
+                            'text-font': ['Noto Sans Regular'],
+                            'text-size': 12,
+                            'symbol-placement': 'line',
+                            'text-anchor': 'center'
+                        },
+                        'paint': {
+                            'text-color': '#333333',
+                            'text-halo-color': '#ffffff',
+                            'text-halo-width': 1.5
+                        }
+                    }
+                ]
+            }
+        });
+        
+        // Add zoom and rotation controls to the map.
+        map.addControl(new maplibregl.NavigationControl());
+
+        // --- RIDE HAILING ROUTING LOGIC ---
+        let startMarker = null;
+        let endMarker = null;
+
+        map.on('click', async function(e) {
+            const coords = e.lngLat;
+            
+            // If we already have a route, reset it on the next click
+            if (startMarker && endMarker) {
+                startMarker.remove();
+                endMarker.remove();
+                startMarker = null;
+                endMarker = null;
+                if (map.getSource('route')) {
+                    map.getSource('route').setData({ type: 'FeatureCollection', features: [] });
+                }
+            }
+
+            if (!startMarker) {
+                startMarker = new maplibregl.Marker({color: 'green'}).setLngLat(coords).addTo(map);
+            } else if (!endMarker) {
+                endMarker = new maplibregl.Marker({color: 'red'}).setLngLat(coords).addTo(map);
+                
+                // 1. We have two points! Let's ask our local GraphHopper container for the fastest car route
+                const ghUrl = `http://localhost:8989/route?point=${startMarker.getLngLat().lat},${startMarker.getLngLat().lng}&point=${endMarker.getLngLat().lat},${endMarker.getLngLat().lng}&profile=car&points_encoded=false`;
+                
+                try {
+                    const response = await fetch(ghUrl);
+                    const data = await response.json();
+                    
+                    if (data.paths && data.paths.length > 0) {
+                        const path = data.paths[0];
+                        
+                        // 2. GraphHopper returned the path geometry! Let's draw it as a GeoJSON line
+                        const geojson = {
+                            type: 'Feature',
+                            properties: {},
+                            geometry: path.points
+                        };
+                        
+                        if (map.getSource('route')) {
+                            map.getSource('route').setData(geojson);
+                        } else {
+                            map.addSource('route', { type: 'geojson', data: geojson });
+                            map.addLayer({
+                                id: 'route-line',
+                                type: 'line',
+                                source: 'route',
+                                paint: {
+                                    'line-color': '#0066FF',
+                                    'line-width': 6,
+                                    'line-opacity': 0.8
+                                }
+                            });
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error fetching route from GraphHopper:', error);
+                    alert("Could not connect to GraphHopper. Is it running?");
+                }
+            }
+        });
+
+        // --- PELIAS GEOCODING LOGIC ---
+        // Create a draggable "My Location" marker for location-biasing
+        const myLocationMarker = new maplibregl.Marker({ color: 'blue', draggable: true })
+            .setLngLat([68.7870, 38.5598])
+            .addTo(map);
+
+        const searchInput = document.getElementById('search-input');
+        const searchResults = document.getElementById('search-results');
+        let searchTimeout = null;
+
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            const query = this.value;
+            
+            if (query.length < 3) {
+                searchResults.innerHTML = '';
+                return;
+            }
+
+            searchTimeout = setTimeout(async () => {
+                try {
+                    // Bias search results to the draggable marker
+                    const loc = myLocationMarker.getLngLat();
+                    const url = `http://localhost:4047/v1/autocomplete?text=${encodeURIComponent(query)}&focus.point.lat=${loc.lat}&focus.point.lon=${loc.lng}`;
+                    
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    
+                    searchResults.innerHTML = '';
+                    
+                    if (data.features && data.features.length > 0) {
+                        data.features.slice(0, 5).forEach(feature => {
+                            const div = document.createElement('div');
+                            div.style.padding = '5px';
+                            div.style.cursor = 'pointer';
+                            div.style.borderBottom = '1px solid #eee';
+                            div.textContent = feature.properties.name || feature.properties.label;
+                            
+                            div.onmouseover = () => div.style.backgroundColor = '#f0f0f0';
+                            div.onmouseout = () => div.style.backgroundColor = 'transparent';
+                            
+                            div.onclick = () => {
+                                // Fly the map to the search result
+                                const coords = feature.geometry.coordinates;
+                                map.flyTo({ center: coords, zoom: 16 });
+                                
+                                // Optional: Automatically set it as a routing marker
+                                new maplibregl.Marker().setLngLat(coords).addTo(map);
+                                searchResults.innerHTML = '';
+                                searchInput.value = feature.properties.name || feature.properties.label;
+                            };
+                            
+                            searchResults.appendChild(div);
+                        });
+                    } else {
+                        searchResults.innerHTML = '<div style="padding:5px">No results found</div>';
+                    }
+                } catch (err) {
+                    console.error("Pelias error:", err);
+                    searchResults.innerHTML = '<div style="padding:5px; color:red;">Error connecting to Pelias</div>';
+                }
+            }, 300); // Wait 300ms after typing stops before searching
+        });
+
+        // When the map finishes loading, check for saved shapes!
+        map.on('load', function() {
+            var savedData = localStorage.getItem('saved_shapes');
+            if (savedData) {
+                var geojson = JSON.parse(savedData);
+                
+                // Add the data to the map
+                map.addSource('custom-shapes', {
+                    'type': 'geojson',
+                    'data': geojson
+                });
+
+                // Add a bright pink color layer so it stands out!
+                map.addLayer({
+                    'id': 'custom-shapes-fill',
+                    'type': 'fill',
+                    'source': 'custom-shapes',
+                    'paint': {
+                        'fill-color': '#ff00ff',
+                        'fill-opacity': 0.5,
+                        'fill-outline-color': '#aa00aa'
+                    },
+                    'filter': ['==', '$type', 'Polygon']
+                });
+
+                // Add a line layer for roads/lines they might have drawn
+                map.addLayer({
+                    'id': 'custom-shapes-line',
+                    'type': 'line',
+                    'source': 'custom-shapes',
+                    'paint': {
+                        'line-color': '#ff00ff',
+                        'line-width': 4
+                    },
+                    'filter': ['==', '$type', 'LineString']
+                });
+            }
+        });
+    </script>
+</body>
+</html>

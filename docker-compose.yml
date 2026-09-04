@@ -1,0 +1,76 @@
+services:
+  # 1. Database: PostgreSQL + PostGIS (for Martin)
+  db:
+    image: imresamu/postgis:17-3.5-bookworm
+    container_name: franken_db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=gis
+    ports:
+      - "5455:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  # 2. Vector Tile Server: Martin
+  martin:
+    image: ghcr.io/maplibre/martin:latest
+    container_name: franken_martin
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/gis
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+
+  # 3. Routing Engine: GraphHopper
+  graphhopper:
+    image: israelhikingmap/graphhopper:latest
+    container_name: franken_graphhopper
+    ports:
+      - "8989:8989"
+    volumes:
+      - ./gh-data:/data
+    command: -i /data/tajikistan-latest.osm.pbf
+    environment:
+      - JAVA_OPTS=-Xmx2g -Xms2g
+
+  # 4. Geocoding Database: Elasticsearch (Required by Pelias)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.13
+    container_name: franken_elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+  # 5. Geocoding API: Pelias API
+  pelias_api:
+    image: pelias/api:latest
+    container_name: franken_pelias_api
+    environment:
+      - ELASTICSEARCH_HOST=http://elasticsearch:9200
+    volumes:
+      - ./pelias.json:/code/pelias.json
+    ports:
+      - "4047:3100"
+    depends_on:
+      - elasticsearch
+
+  # 6. Frontend Web Server: franki_gui
+  franki_gui:
+    image: nginx:alpine
+    container_name: franki_gui
+    ports:
+      - "8086:80"
+    volumes:
+      - ./franki_gui:/usr/share/nginx/html
+
+volumes:
+  pg_data:
+  es_data:

@@ -1,0 +1,40 @@
+{
+  "esclient": {
+    "hosts": [{ "host": "elasticsearch", "port": 9200 }]
+  },
+  "elasticsearch": {
+    "settings": {
+      "index": {
+        "refresh_interval": "10s",
+        "number_of_replicas": "0",
+        "number_of_shards": "1"
+      }
+    }
+  },
+  "imports": {
+    "adminLookup": {
+      "enabled": false
+    },
+    "openstreetmap": {
+      "download": [],
+      "leveldbpath": "/tmp",
+      "datapath": "/data",
+      "import": [{
+        "filename": "tajikistan-latest.osm.pbf"
+      }]
+    },
+    "csv": {
+      "datapath": "/data",
+      "download": [],
+      "files": ["custom_places.csv"]
+    },
+    "geonames": {
+      "datapath": "/data",
+      "countryCode": "TJ"
+    },
+    "polyline": {
+      "datapath": "/data",
+      "files": [ "road_network.polylines" ]
+    }
+  }
+}
