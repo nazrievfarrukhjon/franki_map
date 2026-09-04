@@ -3,6 +3,7 @@ services:
   db:
     image: imresamu/postgis:17-3.5-bookworm
     container_name: franken_db
+    restart: unless-stopped
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -16,6 +17,7 @@ services:
   martin:
     image: ghcr.io/maplibre/martin:latest
     container_name: franken_martin
+    restart: unless-stopped
     environment:
       - DATABASE_URL=postgres://postgres:postgres@db:5432/gis
     ports:
@@ -27,6 +29,7 @@ services:
   graphhopper:
     image: israelhikingmap/graphhopper:latest
     container_name: franken_graphhopper
+    restart: unless-stopped
     ports:
       - "8989:8989"
     volumes:
@@ -39,6 +42,7 @@ services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.17.13
     container_name: franken_elasticsearch
+    restart: unless-stopped
     environment:
       - discovery.type=single-node
       - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
@@ -53,6 +57,7 @@ services:
   pelias_api:
     image: pelias/api:latest
     container_name: franken_pelias_api
+    restart: unless-stopped
     environment:
       - ELASTICSEARCH_HOST=http://elasticsearch:9200
     volumes:
@@ -66,6 +71,7 @@ services:
   franki_gui:
     image: nginx:alpine
     container_name: franki_gui
+    restart: unless-stopped
     ports:
       - "8086:80"
     volumes:
