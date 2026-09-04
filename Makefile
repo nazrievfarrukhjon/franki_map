@@ -7,4 +7,7 @@ feed-map-data:
 .PHONY: feed-poi-data
 
 feed-poi-data:
+	-docker exec franken_elasticsearch bin/elasticsearch-plugin install --batch analysis-icu
+	-docker restart franken_elasticsearch
+	sleep 15
 	./update_search.sh
