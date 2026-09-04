@@ -14,13 +14,30 @@
 <body>
     <!-- RIDE HAILING SEARCH BAR -->
     <div id="search-container" style="position: absolute; top: 10px; left: 10px; z-index: 1000; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 300px; font-family: sans-serif;">
-        <h3 style="margin: 0 0 10px 0; font-size: 16px;">Where to?</h3>
+                <h3 style="margin: 0 0 10px 0; font-size: 16px;">Where to?</h3>
+        <div style="margin-bottom: 10px;">
+            <label style="font-size: 11px; color: #666;">Server IP:</label>
+            <input type="text" id="server-ip" placeholder="Server IP" style="width: 100%; padding: 6px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;">
+        </div>
         <input type="text" id="search-input" placeholder="Search address or POI..." style="width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 5px;">
         <div id="search-results" style="max-height: 200px; overflow-y: auto; font-size: 13px; color: #333;"></div>
     </div>
     
     <div id="map"></div>
     <script>
+
+        // Automatically detect the server IP from the browser URL, or fallback to localhost
+        let SERVER_IP = window.location.hostname || "127.0.0.1";
+        
+        const ipInput = document.getElementById('server-ip');
+        if (ipInput) {
+            ipInput.value = SERVER_IP;
+            ipInput.addEventListener('change', (e) => {
+                SERVER_IP = e.target.value;
+                alert("Server IP updated to " + SERVER_IP + ". Please refresh the page if the map tiles need to reload.");
+            });
+        }
+
         var map = new maplibregl.Map({
             container: 'map',
             center: [68.7870, 38.5598], // Dushanbe
@@ -28,15 +45,15 @@
             pitch: 45,
             style: {
                 version: 8,
-                glyphs: "http://localhost:8086/fonts/{fontstack}/{range}.pbf",
+                glyphs: `http://${SERVER_IP}:8086/fonts/{fontstack}/{range}.pbf`,
                 sources: {
                     'osm_polygon': {
                         type: 'vector',
-                        url: 'http://127.0.0.1:3000/planet_osm_polygon'
+                        url: `http://${SERVER_IP}:3000/planet_osm_polygon`
                     },
                     'osm_line': {
                         type: 'vector',
-                        url: 'http://127.0.0.1:3000/planet_osm_line'
+                        url: `http://${SERVER_IP}:3000/planet_osm_line`
                     }
                 },
                 layers: [
@@ -134,7 +151,7 @@
                 endMarker = new maplibregl.Marker({color: 'red'}).setLngLat(coords).addTo(map);
                 
                 // 1. We have two points! Let's ask our local GraphHopper container for the fastest car route
-                const ghUrl = `http://localhost:8989/route?point=${startMarker.getLngLat().lat},${startMarker.getLngLat().lng}&point=${endMarker.getLngLat().lat},${endMarker.getLngLat().lng}&profile=car&points_encoded=false`;
+                const ghUrl = `http://${SERVER_IP}:8989/route?point=${startMarker.getLngLat().lat},${startMarker.getLngLat().lng}&point=${endMarker.getLngLat().lat},${endMarker.getLngLat().lng}&profile=car&points_encoded=false`;
                 
                 try {
                     const response = await fetch(ghUrl);
@@ -196,7 +213,7 @@
                 try {
                     // Bias search results to the draggable marker
                     const loc = myLocationMarker.getLngLat();
-                    const url = `http://localhost:4047/v1/autocomplete?text=${encodeURIComponent(query)}&focus.point.lat=${loc.lat}&focus.point.lon=${loc.lng}`;
+                    const url = `http://${SERVER_IP}:4047/v1/autocomplete?text=${encodeURIComponent(query)}&focus.point.lat=${loc.lat}&focus.point.lon=${loc.lng}`;
                     
                     const res = await fetch(url);
                     const data = await res.json();
