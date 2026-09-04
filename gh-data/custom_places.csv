@@ -1,0 +1,3 @@
+source,layer,id,lat,lon,name
+csv,venue,navoi_airport,40.1239,65.1764,"Navoi International Airport"
+csv,venue,custom_dushanbe,38.5739,68.7984,"Custom Place Dushanbe"
